@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../pages/Authcontext";
 
-const navItems = [
+const adminNav = [
   {
     section: "MAIN",
     links: [
@@ -11,34 +11,54 @@ const navItems = [
     ],
   },
   {
+    section: "FINANCE",
+    links: [
+      { label: "Sales",    icon: "◎", href: "/sales"    },
+      { label: "Expenses", icon: "◈", href: "/expenses" },
+    ]
+  },
+  {
     section: "OPERATIONS",
     links: [
       { label: "Add Stock", icon: "✎", href: "/add-stock" },
-      // { label: "Low Stock Alerts", icon: "⚠", href: "/low-stock" },
+      { label: "Add Sale", icon: "◎", href: "/add-sale" },
+    ],
+  },
+
+  
+];
+
+const staffNav = [
+  {
+    section: "MAIN",
+    links: [
+      { label: "Dashboard", icon: "▪", href: "/dashboard" },
+      { label: "Inventory", icon: "◈", href: "/inventory" },
+      { label: "Staff", icon: "⬡", href: "/management" },
+      // { label: "My Profile", icon: "◎", href: "/profile" },
+    ],
+  },
+  {
+    section: "OPERATIONS",
+    links: [
+      { label: "Add Stock", icon: "✎", href: "/add-stock" },
     ],
   },
 ];
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, profile, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const navItems = isAdmin ? adminNav : staffNav;
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/auth");
   };
 
-  // Get initials from user name or email
   const getInitials = () => {
-    if (user?.fullName) {
-      return user.fullName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    return user?.email?.charAt(0).toUpperCase() || "U";
+    const name = profile?.name || user?.user_metadata?.full_name || user?.email || "U";
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
   return (
@@ -46,13 +66,7 @@ export default function Navbar() {
       {/* Logo */}
       <div className="flex h-14 items-center px-4 border-b border-gray-200">
         <span className="tracking-tight text-xs font-bold text-black uppercase flex items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            className="w-3 h-3"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-3 h-3">
             <rect x="2" y="2" width="20" height="20" strokeWidth="2" />
             <path d="M2 2L22 22M22 2L2 22" strokeWidth="2" strokeLinecap="square" />
           </svg>
@@ -68,31 +82,19 @@ export default function Navbar() {
               {group.section}
             </p>
             {group.links.map((item) => (
-              <NavLink
-                key={item.label}
-                to={item.href}
+              <NavLink key={item.label} to={item.href}
                 className={({ isActive }) =>
                   `group flex items-center gap-3 px-3 py-2 mx-2 my-1 text-sm rounded-xl border border-gray-200 !text-black shadow-sm transition-all duration-150 ${
-                    isActive
-                      ? "bg-black text-white"
-                      : "text-black hover:bg-black hover:text-white"
+                    isActive ? "bg-black text-white" : "text-black hover:bg-black hover:text-white"
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <span
-                      className={`text-base ${
-                        isActive ? "text-white" : "group-hover:text-white"
-                      }`}
-                    >
+                    <span className={`text-base ${isActive ? "text-white" : "group-hover:text-white"}`}>
                       {item.icon}
                     </span>
-                    <span
-                      className={`flex-1 tracking-wide text-xs uppercase font-medium ${
-                        isActive ? "text-white" : "group-hover:text-white"
-                      }`}
-                    >
+                    <span className={`flex-1 tracking-wide text-xs uppercase font-medium ${isActive ? "text-white" : "group-hover:text-white"}`}>
                       {item.label}
                     </span>
                   </>
@@ -103,26 +105,42 @@ export default function Navbar() {
         ))}
       </nav>
 
-      {/* User Section */}
+      {/* User section */}
       <div className="border-t border-gray-200 p-3 space-y-3">
-        {/* User Info */}
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded border border-black bg-black text-xs font-bold text-white">
-            {getInitials()}
-          </div>
+        <NavLink
+          to="/profile"
+          className="transition hover:opacity-80 hover:scale-105"
+        >
+          {user?.user_metadata?.avatar_url ? (
+            <img
+              src={user.user_metadata.avatar_url}
+              alt="avatar"
+              className="h-8 w-8 rounded border border-gray-200 object-cover"
+            />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded border border-black bg-black text-xs font-bold text-white">
+              {getInitials()}
+            </div>
+          )}
+        </NavLink>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-black uppercase tracking-wider">
-              {user?.fullName || user?.email?.split("@")[0] || "User"}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-xs font-semibold text-black uppercase tracking-wider">
+                {profile?.name || user?.email?.split("@")[0] || "User"}
+              </p>
+              {isAdmin && (
+                <span className="shrink-0 text-[9px] font-bold bg-black text-white px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Admin
+                </span>
+              )}
+            </div>
             <p className="truncate text-[10px] text-gray-500">{user?.email}</p>
           </div>
         </div>
 
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-150"
-        >
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-150">
           <span className="text-sm">↪</span>
           <span className="uppercase tracking-wider">Logout</span>
         </button>

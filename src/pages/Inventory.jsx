@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
-import { getInventory } from "../api/apiFunctions";
+import { getInventory, updateInventory, deleteInventory } from "../api/apiFunctions";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "./Authcontext";
 
 const ITEMS_PER_PAGE = 15;
-
 const ALL_CATEGORIES = ["All", "Breads", "Pastries", "Muffins", "Cakes", "Cookies"];
 const ALL_STATUSES = ["All", "In Stock", "Low Stock", "Out of Stock"];
 
@@ -27,7 +27,7 @@ function Modal({ title, onClose, children }) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h2 className="text-base font-bold text-black">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors text-lg leading-none">✕</button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -47,7 +47,6 @@ function ItemForm({ initial, onSave, onCancel, isEdit = false }) {
   const validate = () => {
     const e = {};
     if (!form.name.trim()) e.name = "Name is required.";
-    if (!form.category) e.category = "Category is required.";
     if (isNaN(Number(form.stock)) || Number(form.stock) < 0) e.stock = "Enter a valid stock.";
     if (isNaN(Number(form.costPrice)) || Number(form.costPrice) <= 0) e.costPrice = "Enter a valid cost price.";
     if (isNaN(Number(form.sellPrice)) || Number(form.sellPrice) <= 0) e.sellPrice = "Enter a valid sell price.";
@@ -57,16 +56,8 @@ function ItemForm({ initial, onSave, onCancel, isEdit = false }) {
 
   const handleSave = () => {
     const e = validate();
-    if (Object.keys(e).length > 0) {
-      setErrors(e);
-      return;
-    }
-    onSave({
-      ...form,
-      stock: parseInt(form.stock),
-      costPrice: parseFloat(form.costPrice),
-      sellPrice: parseFloat(form.sellPrice),
-    });
+    if (Object.keys(e).length > 0) { setErrors(e); return; }
+    onSave({ ...form, stock: parseInt(form.stock), costPrice: parseFloat(form.costPrice), sellPrice: parseFloat(form.sellPrice) });
   };
 
   const Field = ({ label, field, type = "text", placeholder }) => (
@@ -74,15 +65,8 @@ function ItemForm({ initial, onSave, onCancel, isEdit = false }) {
       <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
         {label} <span className="text-black">*</span>
       </label>
-      <input
-        type={type}
-        value={form[field]}
-        onChange={(e) => set(field, e.target.value)}
-        placeholder={placeholder}
-        className={`w-full px-3 py-2 text-sm text-black border rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all ${
-          errors[field] ? "border-red-300 bg-red-50" : "border-gray-200"
-        }`}
-      />
+      <input type={type} value={form[field]} onChange={(e) => set(field, e.target.value)} placeholder={placeholder}
+        className={`w-full px-3 py-2 text-sm text-black border rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all ${errors[field] ? "border-red-300 bg-red-50" : "border-gray-200"}`} />
       {errors[field] && <p className="text-xs text-red-400 mt-1">{errors[field]}</p>}
     </div>
   );
@@ -92,20 +76,12 @@ function ItemForm({ initial, onSave, onCancel, isEdit = false }) {
       <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => set(field, opt)}
-            className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
-              form[field] === opt
-                ? "bg-black text-white border-black"
-                : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"
-            }`}
-          >
+          <button key={opt} onClick={() => set(field, opt)}
+            className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${form[field] === opt ? "bg-black text-white border-black" : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"}`}>
             {opt}
           </button>
         ))}
       </div>
-      {errors[field] && <p className="text-xs text-red-400 mt-1">{errors[field]}</p>}
     </div>
   );
 
@@ -120,16 +96,8 @@ function ItemForm({ initial, onSave, onCancel, isEdit = false }) {
       <Field label="Sell Price" field="sellPrice" type="number" placeholder="0.00" />
       <Field label="Expiry Date" field="expiry" type="date" />
       <div className="flex gap-2 pt-2">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
+        <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors">Cancel</button>
+        <button onClick={handleSave} className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
           {isEdit ? "Save Changes" : "Add Item"} →
         </button>
       </div>
@@ -146,119 +114,70 @@ function DeleteConfirm({ item, onConfirm, onCancel }) {
         </svg>
       </div>
       <h3 className="text-sm font-bold text-gray-800 mb-1">Remove {item.name}?</h3>
-      <p className="text-xs text-gray-400 mb-5">
-        This will permanently delete <span className="font-mono">{item.id}</span> from inventory.
-      </p>
+      <p className="text-xs text-gray-400 mb-5">This will permanently delete <span className="font-mono">{item.id}</span> from inventory.</p>
       <div className="flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onConfirm}
-          className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          Remove
-        </button>
+        <button onClick={onCancel} className="flex-1 px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors">Cancel</button>
+        <button onClick={onConfirm} className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">Remove</button>
       </div>
     </div>
   );
 }
 
 export default function Inventory() {
+  const { isAdmin } = useAuth();
   const [inventory, setInventory] = useState([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
-  const [modal, setModal] = useState(null); // null | { type: "view" | "edit" | "delete", item }
+  const [modal, setModal] = useState(null);
 
   useEffect(() => {
-    const loadInventory = async () => {
-      const data = await getInventory();
-      setInventory(data);
-    };
-
-    loadInventory();
+    getInventory().then(setInventory);
   }, []);
 
   const filtered = useMemo(() => {
     return inventory.filter((item) => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.id.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory =
-        categoryFilter === "All" || item.category === categoryFilter;
-      const matchesStatus =
-        statusFilter === "All" || item.status === statusFilter;
-
+      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.id.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = categoryFilter === "All" || item.category === categoryFilter;
+      const matchesStatus = statusFilter === "All" || item.status === statusFilter;
       return matchesSearch && matchesCategory && matchesStatus;
     });
   }, [inventory, search, categoryFilter, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = filtered.slice(
-    (page - 1) * ITEMS_PER_PAGE,
-    page * ITEMS_PER_PAGE
-  );
-
+  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
   const resetPage = () => setPage(1);
 
-  // Summary stats
   const totalItems = inventory.length;
   const lowStock = inventory.filter((i) => i.status === "Low Stock").length;
   const outOfStock = inventory.filter((i) => i.status === "Out of Stock").length;
   const totalValue = inventory.reduce((sum, i) => sum + i.stock * i.costPrice, 0);
 
-  // Action handlers
-  const handleAdd = (newItem) => {
-    const item = {
-      ...newItem,
-      id: `SKU-${String(inventory.length + 1).padStart(3, "0")}`,
-    };
-    setInventory((prev) => [...prev, item]);
+  const handleEdit = async (updated) => {
+    await updateInventory(updated.id, updated);
+    setInventory((prev) => prev.map((i) => i.id === updated.id ? updated : i));
     setModal(null);
   };
 
-  const handleEdit = (updated) => {
-    setInventory((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
-    setModal(null);
-  };
-
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
+    await deleteInventory(id);
     setInventory((prev) => prev.filter((i) => i.id !== id));
     setModal(null);
   };
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Modals */}
-      {modal?.type === "add" && (
-        <Modal title="Add Inventory Item" onClose={() => setModal(null)}>
-          <ItemForm
-            initial={{
-              name: "",
-              category: "Breads",
-              stock: "",
-              costPrice: "",
-              sellPrice: "",
-              expiry: "",
-            }}
-            onSave={handleAdd}
-            onCancel={() => setModal(null)}
-          />
-        </Modal>
-      )}
+      {/* Edit Modal — all users */}
       {modal?.type === "edit" && (
         <Modal title="Edit Inventory Item" onClose={() => setModal(null)}>
-          <ItemForm
-            initial={modal.item}
-            onSave={handleEdit}
-            onCancel={() => setModal(null)}
-            isEdit
-          />
+          <ItemForm initial={modal.item} onSave={handleEdit} onCancel={() => setModal(null)} isEdit />
+        </Modal>
+      )}
+      {/* Delete Modal — all users */}
+      {modal?.type === "delete" && (
+        <Modal title="Confirm Removal" onClose={() => setModal(null)}>
+          <DeleteConfirm item={modal.item} onConfirm={() => handleDelete(modal.item.id)} onCancel={() => setModal(null)} />
         </Modal>
       )}
       {modal?.type === "view" && (
@@ -277,10 +196,14 @@ export default function Inventory() {
               {[
                 ["Category", modal.item.category],
                 ["Stock", `${modal.item.stock} units`],
-                ["Cost Price", `₱${modal.item.costPrice.toFixed(2)}`],
-                ["Sell Price", `₱${modal.item.sellPrice.toFixed(2)}`],
+                ...(isAdmin ? [
+                  ["Cost Price", `₱${modal.item.costPrice?.toFixed(2)}`],
+                  ["Sell Price", `₱${modal.item.sellPrice?.toFixed(2)}`],
+                ] : [
+                  ["Sell Price", `₱${modal.item.sellPrice?.toFixed(2)}`],
+                ]),
                 ["Expiry", modal.item.expiry],
-                ["Value", `₱${(modal.item.stock * modal.item.sellPrice).toFixed(2)}`],
+                ...(isAdmin ? [["Value", `₱${(modal.item.stock * modal.item.sellPrice).toFixed(2)}`]] : []),
               ].map(([label, value]) => (
                 <div key={label} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-gray-400 uppercase tracking-wider text-[10px]">{label}</p>
@@ -288,30 +211,18 @@ export default function Inventory() {
                 </div>
               ))}
             </div>
+            {/* Edit/Remove in view modal — all users */}
             <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setModal({ type: "edit", item: modal.item })}
-                className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-              >
+              <button onClick={() => setModal({ type: "edit", item: modal.item })}
+                className="flex-1 px-4 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
                 Edit
               </button>
-              <button
-                onClick={() => setModal({ type: "delete", item: modal.item })}
-                className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-red-300 hover:text-red-400 transition-colors"
-              >
+              <button onClick={() => setModal({ type: "delete", item: modal.item })}
+                className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-lg hover:border-red-300 hover:text-red-400 transition-colors">
                 Remove
               </button>
             </div>
           </div>
-        </Modal>
-      )}
-      {modal?.type === "delete" && (
-        <Modal title="Confirm Removal" onClose={() => setModal(null)}>
-          <DeleteConfirm
-            item={modal.item}
-            onConfirm={() => handleDelete(modal.item.id)}
-            onCancel={() => setModal(null)}
-          />
         </Modal>
       )}
 
@@ -320,8 +231,16 @@ export default function Inventory() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-black tracking-tight">Bakery Inventory</h1>
-            <p className="text-sm text-gray-400 mt-1">Manage baked goods stock</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {isAdmin ? "Manage baked goods stock" : "View current stock levels"}
+            </p>
           </div>
+          {isAdmin && (
+            <NavLink to="/add-stock"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-black text-white rounded-xl hover:text-white transition-colors">
+              + Add Stock
+            </NavLink>
+          )}
         </div>
 
         {/* Stats */}
@@ -330,99 +249,59 @@ export default function Inventory() {
             <p className="text-xs text-gray-400 uppercase tracking-wider">Total Items</p>
             <p className="text-2xl font-bold text-gray-800 mt-1">{totalItems}</p>
           </div>
-
           <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Low Stock</p>
             <p className="text-2xl font-bold text-gray-700 mt-1">{lowStock}</p>
           </div>
-
           <div className="bg-black rounded-xl p-4 border border-black shadow-sm">
             <p className="text-xs text-gray-400 uppercase tracking-wider">Out of Stock</p>
             <p className="text-2xl font-bold text-white mt-1">{outOfStock}</p>
           </div>
-
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Stock Value</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">
-              ₱{totalValue.toFixed(0)}
-            </p>
-          </div>
+          {isAdmin ? (
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+              <p className="text-xs text-gray-400 uppercase tracking-wider">Stock Value</p>
+              <p className="text-2xl font-bold text-gray-800 mt-1">₱{totalValue.toFixed(0)}</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+              <p className="text-xs text-gray-400 uppercase tracking-wider">In Stock</p>
+              <p className="text-2xl font-bold text-gray-800 mt-1">
+                {inventory.filter((i) => i.status === "In Stock").length}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Search + Filters */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-          {/* Search */}
           <div className="relative mb-3">
             <span className="absolute inset-y-0 left-3 flex items-center text-gray-400">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
               </svg>
             </span>
-
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                resetPage();
-              }}
+            <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); resetPage(); }}
               placeholder="Search by item name or ID..."
-              className="w-full pl-9 pr-4 py-2 text-sm text-black border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-            />
+              className="w-full pl-9 pr-4 py-2 text-sm text-black border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent" />
           </div>
-
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Category Filter */}
             <div className="flex-1">
               <p className="text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Category</p>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => {
-                      setCategoryFilter(cat);
-                      resetPage();
-                    }}
-                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${
-                      categoryFilter === cat
-                        ? "bg-black text-white border-black"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"
-                    }`}
-                  >
+                  <button key={cat} onClick={() => { setCategoryFilter(cat); resetPage(); }}
+                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${categoryFilter === cat ? "bg-black text-white border-black" : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"}`}>
                     {cat}
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Status Filter */}
             <div className="flex-1">
               <p className="text-xs text-gray-400 mb-1.5 uppercase tracking-wider">Status</p>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_STATUSES.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      setStatusFilter(s);
-                      resetPage();
-                    }}
-                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${
-                      statusFilter === s
-                        ? "bg-black text-white border-black"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"
-                    }`}
-                  >
+                  <button key={s} onClick={() => { setStatusFilter(s); resetPage(); }}
+                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${statusFilter === s ? "bg-black text-white border-black" : "bg-white text-gray-500 border-gray-200 hover:border-black hover:text-white"}`}>
                     {s}
                   </button>
                 ))}
@@ -431,10 +310,8 @@ export default function Inventory() {
           </div>
         </div>
 
-        {/* Results */}
         <p className="text-xs text-gray-400 mb-3">
-          Showing {paginated.length} of {filtered.length} item
-          {filtered.length !== 1 ? "s" : ""}
+          Showing {paginated.length} of {filtered.length} item{filtered.length !== 1 ? "s" : ""}
         </p>
 
         {/* Table */}
@@ -446,86 +323,58 @@ export default function Inventory() {
                 <th className="p-3 font-semibold">Item</th>
                 <th className="p-3 font-semibold">Category</th>
                 <th className="p-3 font-semibold text-right">Stock</th>
-                <th className="p-3 font-semibold text-right">Cost</th>
+                {isAdmin && <th className="p-3 font-semibold text-right">Cost</th>}
                 <th className="p-3 font-semibold text-right">Sell Price</th>
                 <th className="p-3 font-semibold">Expiry</th>
                 <th className="p-3 font-semibold">Status</th>
                 <th className="p-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-gray-50">
-              {paginated.length > 0 ? (
-                paginated.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50 transition-colors duration-100"
-                  >
-                    <td className="p-3 font-mono text-gray-400">{item.id}</td>
-                    <td className="p-3 font-semibold text-gray-800">{item.name}</td>
-                    <td className="p-3">
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[item.category]}`}>
-                        {item.category}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <span
-                        className={`font-bold ${
-                          item.stock === 0
-                            ? "text-gray-300"
-                            : item.stock <= 5
-                            ? "text-gray-500"
-                            : "text-gray-800"
-                        }`}
-                      >
-                        {item.stock}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right text-gray-500">
-                      ₱{item.costPrice.toFixed(2)}
-                    </td>
-                    <td className="p-3 text-right font-semibold text-gray-800">
-                      ₱{item.sellPrice.toFixed(2)}
-                    </td>
-                    <td className="p-3 text-gray-500">{item.expiry}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2.5 py-1 font-semibold rounded-full text-[11px] ${
-                          STATUS_STYLES[item.status]
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => setModal({ type: "view", item })}
-                          className="px-2.5 py-1 text-[11px] font-medium text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 hover:text-white transition-colors"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => setModal({ type: "edit", item })}
-                          className="px-2.5 py-1 text-[11px] font-medium text-gray-500 border border-gray-200 rounded-lg hover:border-black hover:text-white transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setModal({ type: "delete", item })}
-                          className="px-2.5 py-1 text-[11px] font-medium text-gray-400 border border-gray-200 rounded-lg hover:border-red-300 hover:text-red-400 transition-colors"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={9} className="p-10 text-center text-gray-400">
-                    No items found.
+              {paginated.length > 0 ? paginated.map((item) => (
+                <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-100">
+                  <td className="p-3 font-mono text-gray-400">{item.id}</td>
+                  <td className="p-3 font-semibold text-gray-800">{item.name}</td>
+                  <td className="p-3">
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${CATEGORY_COLORS[item.category]}`}>
+                      {item.category}
+                    </span>
                   </td>
+                  <td className="p-3 text-right">
+                    <span className={`font-bold ${item.stock === 0 ? "text-gray-300" : item.stock <= 5 ? "text-gray-500" : "text-gray-800"}`}>
+                      {item.stock}
+                    </span>
+                  </td>
+                  {isAdmin && (
+                    <td className="p-3 text-right text-gray-500">₱{item.costPrice.toFixed(2)}</td>
+                  )}
+                  <td className="p-3 text-right font-semibold text-gray-800">₱{item.sellPrice.toFixed(2)}</td>
+                  <td className="p-3 text-gray-500">{item.expiry}</td>
+                  <td className="p-3">
+                    <span className={`px-2.5 py-1 font-semibold rounded-full text-[11px] ${STATUS_STYLES[item.status]}`}>
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="p-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => setModal({ type: "view", item })}
+                        className="px-2.5 py-1 text-[11px] font-medium text-gray-500 border border-gray-200 rounded-lg hover:border-gray-400 hover:text-black transition-colors">
+                        View
+                      </button>
+                      <button onClick={() => setModal({ type: "edit", item })}
+                        className="px-2.5 py-1 text-[11px] font-medium text-gray-500 border border-gray-200 rounded-lg hover:border-black hover:text-black transition-colors">
+                        Edit
+                      </button>
+                      <button onClick={() => setModal({ type: "delete", item })}
+                        className="px-2.5 py-1 text-[11px] font-medium text-gray-400 border border-gray-200 rounded-lg hover:border-red-300 hover:text-red-400 transition-colors">
+                        ✕
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={isAdmin ? 9 : 8} className="p-10 text-center text-gray-400">No items found.</td>
                 </tr>
               )}
             </tbody>
@@ -535,38 +384,20 @@ export default function Inventory() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4">
-            <p className="text-xs text-gray-400">
-              Page {page} of {totalPages}
-            </p>
-
+            <p className="text-xs text-gray-400">Page {page} of {totalPages}</p>
             <div className="flex gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-black disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-black disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 ← Prev
               </button>
-
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`px-2 py-1.5 text-xs rounded-lg border transition-colors ${
-                    page === p
-                      ? "bg-black text-white border-black"
-                      : "border-gray-200 text-gray-600 hover:border-black"
-                  }`}
-                >
+                <button key={p} onClick={() => setPage(p)}
+                  className={`px-2 py-1.5 text-xs rounded-lg border transition-colors ${page === p ? "bg-black text-white border-black" : "border-gray-200 text-gray-600 hover:border-black"}`}>
                   {p}
                 </button>
               ))}
-
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-black disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-black disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 Next →
               </button>
             </div>

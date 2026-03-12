@@ -1,60 +1,43 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./pages/Authcontext";
-import Navbar from "./components/navbar";
+import { AuthProvider } from "./pages/Authcontext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AppLayout from "./components/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import AddStock from "./pages/AddStock";
 import Management from "./pages/Management";
+import Profile from "./pages/Profile";
 import AuthPage from "./pages/AuthPage";
 
-// Protected route wrapper
-function ProtectedRoute({ element }) {
-  const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+import DailySalesReport from "./pages/Dailysalesreport";
+import Expenses from "./pages/Expenses";
 
-  if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  return element;
-}
-
-// Main layout component
-function AppLayout() {
-  const { isAuthenticated } = useAuth();
-
-  return (
-    <div className="flex h-screen bg-white font-mono">
-      {isAuthenticated && <Navbar />}
-      <main className="flex-1 overflow-y-auto p-6">
-        <Routes>
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/" element={<ProtectedRoute element={<Dashboard />} />} />
-          <Route path="/dashboard" element={<ProtectedRoute element={<Dashboard />} />} />
-          <Route path="/inventory" element={<ProtectedRoute element={<Inventory />} />} />
-          <Route path="/add-stock" element={<ProtectedRoute element={<AddStock />} />} />
-          <Route path="/management" element={<ProtectedRoute element={<Management />} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
-  );
-}
+import AddSale from "./pages/AddSale";
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppLayout />
+      <Routes>
+        <Route path="/" element={<AuthPage />} />
+        <Route path="/auth" element={<AuthPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            {/* <Route path="/" element={<Dashboard />} /> */}
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/add-stock" element={<AddStock />} />
+            <Route path="/management" element={<Management />} />
+            <Route path="/profile" element={<Profile />} />
+
+            <Route path="/sales"   element={<DailySalesReport/>} />
+            <Route path="/expenses" element={<Expenses/>} />
+
+            <Route path="/add-sale" element={<AddSale/>}/>
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </AuthProvider>
   );
 }
